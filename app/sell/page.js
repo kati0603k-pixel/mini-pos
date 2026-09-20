@@ -64,6 +64,20 @@ export default function SellPage() {
     setSaving(false);
   }
 
+  // [Telegram] ส่งข้อมูลบิลไปที่ API route (ถ้าส่งไม่สำเร็จ ไม่กระทบการขาย)
+  async function notifyTelegram(items, billTotal) {
+    try {
+      const res = await fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, total: billTotal }),
+      });
+      if (!res.ok) console.error('Telegram notify failed', await res.text());
+    } catch (err) {
+      console.error('Telegram notify error', err);
+    }
+  }
+
   // กดยืนยันขาย
   async function handleSell() {
     setMessage({ type: '', text: '' });
@@ -127,7 +141,18 @@ export default function SellPage() {
       return fail(insErr.message);
     }
 
-    // 5) สำเร็จ: แจ้งผล ล้างตะกร้า โหลดสต็อกใหม่
+    // [Telegram] 5) ขายสำเร็จแล้ว -> ส่งแจ้งเตือน (สต๊อกหลังตัด = สต๊อกเดิม - จำนวนที่ขาย)
+    notifyTelegram(
+      cartLines.map((l) => ({
+        name: l.product.name,
+        qty: l.qty,
+        lineTotal: Number(l.product.price) * l.qty,
+        stockAfter: stockMap[l.id] - l.qty,
+      })),
+      total
+    );
+
+    // 6) สำเร็จ: แจ้งผล ล้างตะกร้า โหลดสต็อกใหม่
     setMessage({
       type: 'success',
       text: `ขายสำเร็จ ${cartLines.length} รายการ รวม ${total.toLocaleString()} บาท`,
